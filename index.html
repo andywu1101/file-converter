@@ -908,6 +908,11 @@ function imageCard(it, num, onChange, onDelete) {
   return c;
 }
 
+/* ---------- 檔名欄：自動帶入預設檔名，使用者自己改過就不再覆蓋 ---------- */
+function autoName(id, def) { const el = $('#' + id); if (!el.dataset.edited) el.value = def; }
+function resetName(id) { const el = $('#' + id); delete el.dataset.edited; el.value = ''; }
+['name1', 'name4'].forEach(id => { const el = $('#' + id); el.oninput = () => { if (el.value.trim()) el.dataset.edited = '1'; else delete el.dataset.edited; }; });
+
 /* ---------- 分頁一：圖片 → PDF ---------- */
 const imgs = [], grid1 = $('#grid1');
 async function addImgs1(files) {
@@ -925,7 +930,7 @@ function render1() {
   grid1.innerHTML = '';
   imgs.forEach((it, i) => grid1.appendChild(imageCard(it, i + 1, render1, () => { imgs.splice(imgs.indexOf(it), 1); URL.revokeObjectURL(it.url); render1(); })));
   $('#info1').textContent = imgs.length ? `共 ${imgs.length} 張圖片` : '尚未加入圖片';
-  $('#name1').placeholder = imgs.length === 1 ? stripExt(imgs[0].name) : '合併檔案';
+  autoName('name1', imgs.length === 1 ? stripExt(imgs[0].name) : imgs.length ? '合併檔案' : '');
 }
 function sortableGrid(grid, arr, after) {
   if (!window.Sortable) return;
@@ -942,7 +947,7 @@ function sortableGrid(grid, arr, after) {
 sortableGrid(grid1, imgs);
 setupDrop('tab-img2pdf', 'in1', addImgs1);
 $('#sortName1').onclick = () => { imgs.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant', { numeric: true })); render1(); };
-$('#clear1').onclick = () => { imgs.forEach(i => URL.revokeObjectURL(i.url)); imgs.length = 0; render1(); };
+$('#clear1').onclick = () => { imgs.forEach(i => URL.revokeObjectURL(i.url)); imgs.length = 0; resetName('name1'); render1(); };
 $$('input[name=layout1]').forEach(r => r.onchange = () => $('#a4opts').classList.toggle('disabled', radio('layout1') !== 'a4'));
 
 const A4 = [595.28, 841.89], MAX_PT = 14400;
@@ -1178,7 +1183,7 @@ function render4() {
   const used = orgSrcs.filter(s => orgPages.some(p => p.src === s));
   $('#legend4').innerHTML = used.length > 1 ? used.map(s => `<span style="--c:${s.color}"></span>`).join('') : '';
   if (used.length > 1) Array.from($('#legend4').children).forEach((el, i) => el.textContent = used[i].name);
-  $('#name4').placeholder = used.length === 1 ? stripExt(used[0].name) : '合併檔案';
+  autoName('name4', used.length === 1 ? stripExt(used[0].name) : used.length ? '合併檔案' : '');
   update4();
 }
 function update4() {
@@ -1225,7 +1230,7 @@ $('#trim4').onclick = async () => {
   } catch (e) { hideProg(); handleError(e); }
 };
 $('#untrim4').onclick = () => { orgPages.forEach(p => p.crop = null); render4(); };
-$('#clear4').onclick = () => { orgSrcs.forEach(s => s.js.destroy()); orgSrcs.length = 0; orgPages.length = 0; render4(); };
+$('#clear4').onclick = () => { orgSrcs.forEach(s => s.js.destroy()); orgSrcs.length = 0; orgPages.length = 0; resetName('name4'); render4(); };
 async function addOrgPage(out, p, s) {
   const lib = await getLib(p.src);
   if (!p.crop && !p.extra && !(stampOn(s) && p.inherent)) { const [cp] = await out.copyPages(lib, [p.idx]); return out.addPage(cp); }
