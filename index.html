@@ -177,7 +177,7 @@ fieldset.disabled{opacity:.45;pointer-events:none}
     </fieldset>
     <fieldset>
       <legend>處理</legend>
-      <div class="row"><label><input type="checkbox" id="trim1"> 自動裁切白邊 (保留約 2 公釐)</label></div>
+      <div class="row"><label><input type="checkbox" id="trim1"> 自動裁切白邊 (保留左右 2、上下 5 公釐)</label></div>
       <div class="row"><label><input type="checkbox" id="gray1"> 轉成灰階</label></div>
       <div class="muted">已手動裁切的圖片不會再自動裁切</div>
     </fieldset>
@@ -248,6 +248,8 @@ fieldset.disabled{opacity:.45;pointer-events:none}
     <span class="info" id="info4">尚未加入 PDF</span>
     <button class="btn small" id="all4">全選</button>
     <button class="btn small" id="none4">全不選</button>
+    <button class="btn small" id="trim4">勾選頁面自動裁白邊</button>
+    <button class="btn small" id="untrim4">取消全部裁切</button>
     <button class="btn small" id="clear4">全部清除</button>
   </div>
   <div class="legend" id="legend4"></div>
@@ -389,7 +391,7 @@ const MIME = { pdf: 'application/pdf', zip: 'application/zip', png: 'image/png',
 const DESC = { pdf: 'PDF 文件', zip: 'ZIP 壓縮檔', png: 'PNG 圖片', jpg: 'JPG 圖片', webp: 'WebP 圖片' };
 const FULL = { x0: 0, y0: 0, x1: 1, y1: 1 };
 const MMPT = 72 / 25.4;          // 1 公釐 = 幾 pt
-const TRIM_MM = 2;               // 自動裁白邊保留的寬度
+const TRIM_X = 2, TRIM_Y = 5;    // 自動裁白邊保留的寬度 (公釐)：左右、上下
 const MAX_CANVAS = 120e6;        // 單張畫布像素上限
 const SRC_COLORS = ['#8B6A4F', '#6F8FA6', '#A3767A', '#7D9466', '#9A8BB0', '#B08F5A', '#5E8C8A', '#A0855B'];
 
@@ -660,10 +662,17 @@ function trimRect(c, padX, padY) {
   if (x1 < 0) return null;
   return { x0: clamp01(x0 / w - padX), y0: clamp01(y0 / h - padY), x1: clamp01((x1 + 1) / w + padX), y1: clamp01((y1 + 1) / h + padY) };
 }
-const imgPadPx = it => (it.dpi || 300) * TRIM_MM / 25.4;   // 沒記錄 DPI 時以 300 DPI 估算
+const pxPerMm = it => (it.dpi || 300) / 25.4;   // 沒記錄 DPI 時以 300 DPI 估算
+// 依「畫面上」的寬高 (pt 或 px) 算出保留邊距的比例；k 為每公釐的單位數
+const trimPads = (dw, dh, k) => [TRIM_X * k / dw, TRIM_Y * k / dh];
+// 在未旋轉的原始座標上裁白邊；旋轉 90/270 度時，左右與上下的邊距要對調
+function trimSource(c, w, h, k, R) {
+  const [mx, my] = R % 180 ? [TRIM_Y, TRIM_X] : [TRIM_X, TRIM_Y];
+  return trimRect(c, mx * k / w, my * k / h);
+}
 async function autoTrimItem(it) {
-  const prev = await makeBase(it.file, it.url, it.w, it.h, 1500), p = imgPadPx(it);
-  return trimRect(prev, p / it.w, p / it.h);
+  const prev = await makeBase(it.file, it.url, it.w, it.h, 1500);
+  return trimSource(prev, it.w, it.h, pxPerMm(it), it.rot || 0);
 }
 function applyGray(c) {
   const ctx = c.getContext('2d'), im = ctx.getImageData(0, 0, c.width, c.height), d = im.data;
@@ -872,8 +881,8 @@ async function cropImageItem(it) {
   try {
     showProg('準備裁切畫面…', 0);
     const prev = await makeBase(it.file, it.url, it.w, it.h, 1600); hideProg();
-    const R = it.rot, dw = R % 180 ? it.h : it.w, dh = R % 180 ? it.w : it.h, p = imgPadPx(it);
-    const res = await openCropModal(composeView(prev, null, R), srcToDisp(it.crop || FULL, R), p / dw, p / dh, it.name);
+    const R = it.rot, dw = R % 180 ? it.h : it.w, dh = R % 180 ? it.w : it.h;
+    const res = await openCropModal(composeView(prev, null, R), srcToDisp(it.crop || FULL, R), ...trimPads(dw, dh, pxPerMm(it)), it.name);
     if (!res) return false;
     it.crop = isFullRect(res) ? null : dispToSrc(res, R);
     return true;
@@ -1183,8 +1192,8 @@ async function cropPdfPage(p) {
     const vp = page.getViewport({ scale: 1600 / Math.max(p.wpt, p.hpt), rotation: 0 });
     const cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
     await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; hideProg();
-    const R = totalRot(p), dw = R % 180 ? p.hpt : p.wpt, dh = R % 180 ? p.wpt : p.hpt, pad = TRIM_MM * MMPT;
-    const res = await openCropModal(composeView(cv, null, R), srcToDisp(p.crop || FULL, R), pad / dw, pad / dh, `${p.src.name} 第 ${p.idx + 1} 頁`);
+    const R = totalRot(p), dw = R % 180 ? p.hpt : p.wpt, dh = R % 180 ? p.wpt : p.hpt;
+    const res = await openCropModal(composeView(cv, null, R), srcToDisp(p.crop || FULL, R), ...trimPads(dw, dh, MMPT), `${p.src.name} 第 ${p.idx + 1} 頁`);
     if (!res) return false;
     p.crop = isFullRect(res) ? null : dispToSrc(res, R);
     return true;
@@ -1194,6 +1203,28 @@ sortableGrid(grid4, orgPages);
 setupDrop('tab-organize', 'in4', addPdfs4);
 $('#all4').onclick = () => { orgPages.forEach(p => p.checked = true); render4(); };
 $('#none4').onclick = () => { orgPages.forEach(p => p.checked = false); render4(); };
+$('#trim4').onclick = async () => {
+  const list = orgPages.filter(p => p.checked);
+  if (!list.length) return toast(orgPages.length ? '請至少勾選一頁' : '請先加入 PDF');
+  let blank = 0;
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      showProg(`自動裁白邊 ${i + 1} / ${list.length}…`, i / list.length);
+      const page = await p.src.js.getPage(p.idx + 1);
+      const vp = page.getViewport({ scale: 1400 / Math.max(p.wpt, p.hpt), rotation: 0 });
+      const cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      const r = trimSource(cv, p.wpt, p.hpt, MMPT, totalRot(p));
+      cv.width = cv.height = 0; page.cleanup();
+      if (!r) { blank++; continue; }
+      p.crop = isFullRect(r) ? null : r;
+    }
+    hideProg(); render4();
+    toast(`已裁切 ${list.length - blank} 頁` + (blank ? ` (${blank} 頁是空白頁，維持原樣)` : ''));
+  } catch (e) { hideProg(); handleError(e); }
+};
+$('#untrim4').onclick = () => { orgPages.forEach(p => p.crop = null); render4(); };
 $('#clear4').onclick = () => { orgSrcs.forEach(s => s.js.destroy()); orgSrcs.length = 0; orgPages.length = 0; render4(); };
 async function addOrgPage(out, p, s) {
   const lib = await getLib(p.src);
@@ -1246,8 +1277,8 @@ $$('input[name=fmt5]').forEach(r => r.onchange = update5);
 function show5(srcRect) { cropper5.setCanvas(composeView(c5.base, null, rot5()), srcToDisp(srcRect || FULL, rot5())); }
 function pad5() {
   const R = rot5();
-  if (c5.kind === 'pdf') { const p = TRIM_MM * MMPT; return [p / (R % 180 ? c5.hpt : c5.wpt), p / (R % 180 ? c5.wpt : c5.hpt)]; }
-  const it = c5.it, p = imgPadPx(it); return [p / (R % 180 ? it.h : it.w), p / (R % 180 ? it.w : it.h)];
+  if (c5.kind === 'pdf') return trimPads(R % 180 ? c5.hpt : c5.wpt, R % 180 ? c5.wpt : c5.hpt, MMPT);
+  const it = c5.it; return trimPads(R % 180 ? it.h : it.w, R % 180 ? it.w : it.h, pxPerMm(it));
 }
 async function loadPage5(num) {
   showProg('載入頁面…', 0);

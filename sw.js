@@ -1,6 +1,6 @@
 // 檔案轉換小工具 — 離線快取
 // 更新工具內容後，把 VERSION 的數字加一，使用者下次開啟就會自動換成新版。
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'file-tool-' + VERSION;
 
 const CORE = [
