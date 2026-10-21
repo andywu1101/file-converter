@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>檔案轉換小工具</title>
+<meta name="theme-color" content="#fffdf6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js" crossorigin="anonymous"></script>
+<style>
+:root{
+  --bg:#f6f1e4; --card:#fffdf6; --text:#3b3a33; --muted:#7d7765; --line:#e3dac5;
+  --accent:#6f9e4f; --accent-dark:#5a8640; --accent-soft:#e9f1dd; --danger:#c96a52;
+  --thumb-bg:#f9f5ea; --shadow:0 1px 3px rgba(90,80,50,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;font-size:15px;line-height:1.5}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+h1{font-size:20px;margin:0;color:var(--accent-dark)}
+.save-setting{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+select,input[type=text]{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);
+  border-radius:6px;padding:5px 8px}
+.tabs{display:flex;gap:4px;padding:12px 20px 0;max-width:1100px;margin:0 auto}
+.tabs button{font:inherit;border:1px solid var(--line);border-bottom:none;background:transparent;color:var(--muted);
+  padding:8px 18px;border-radius:8px 8px 0 0;cursor:pointer}
+.tabs button.active{background:var(--card);color:var(--accent-dark);font-weight:bold;box-shadow:inset 0 3px 0 var(--accent)}
+main{max-width:1100px;margin:0 auto;padding:0 20px 40px}
+.panel{display:none;background:var(--card);border:1px solid var(--line);border-radius:0 8px 8px 8px;padding:20px;box-shadow:var(--shadow)}
+.panel.active{display:block}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:26px;text-align:center;color:var(--muted);transition:.15s}
+.panel.dragover .drop{border-color:var(--accent);background:var(--accent-soft);color:var(--text)}
+.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:6px;
+  padding:6px 14px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary:hover{background:var(--accent-dark);border-color:var(--accent-dark)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;padding:10px 26px;font-size:16px}
+.btn.primary:disabled{opacity:.5;cursor:not-allowed}
+.btn.small{padding:3px 10px;font-size:14px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0 8px}
+.toolbar .info{margin-right:auto;color:var(--muted)}
+.hint{color:var(--muted);font-size:13px;margin:0 0 8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;min-height:20px}
+.card{position:relative;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--thumb-bg);
+  user-select:none}
+.sortable .card{cursor:grab}
+.card .thumb{height:150px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.card img,.card canvas{max-width:100%;max-height:150px;box-shadow:var(--shadow);background:#fff}
+.card .name{font-size:12px;color:var(--muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .num{position:absolute;top:6px;left:6px;background:var(--accent);color:#fff;font-size:12px;
+  border-radius:10px;padding:0 8px;z-index:1}
+.card .del{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:none;
+  background:var(--danger);color:#fff;cursor:pointer;font-size:14px;line-height:24px;padding:0;z-index:1}
+.card.ghost{opacity:.35}
+.pdf-card{cursor:pointer}
+.pdf-card.off{opacity:.4}
+.pdf-card input{position:absolute;top:8px;right:8px;width:18px;height:18px;z-index:1}
+.options{display:flex;flex-wrap:wrap;gap:16px;margin:20px 0}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:0}
+legend{color:var(--muted);font-size:13px;padding:0 4px}
+fieldset label{margin-right:12px;white-space:nowrap;cursor:pointer}
+fieldset.disabled{opacity:.45;pointer-events:none}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.muted{color:var(--muted);font-size:13px}
+.banner{background:#fde8e8;color:#8a1c1c;padding:10px 20px;display:none}
+.banner.show{display:block}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:10}
+#overlay.show{display:flex}
+#overlay .box{background:var(--card);padding:22px 28px;border-radius:10px;min-width:300px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+#overlay progress{width:100%;margin-top:10px}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#4a5a3c;color:#fff;
+  padding:10px 18px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none;z-index:20;max-width:90%}
+#toast.show{opacity:1}
+@media (max-width:600px){ header,main,.tabs{padding-left:16px;padding-right:16px} .panel{padding:14px} }
+</style>
+</head>
+<body>
+
+<div class="banner" id="libBanner">程式庫載入失敗，請確認網路連線後重新整理頁面。</div>
+
+<header>
+  <h1>檔案轉換小工具</h1>
+  <div class="save-setting">
+    <label>儲存位置：
+      <select id="saveMode">
+        <option value="download">瀏覽器下載資料夾</option>
+        <option value="ask">每次選擇位置</option>
+        <option value="folder">固定資料夾</option>
+      </select>
+    </label>
+    <button class="btn small" id="pickFolder" hidden>更換資料夾</button>
+    <span class="muted" id="folderName"></span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="img2pdf" class="active">圖片 → PDF</button>
+  <button data-tab="pdf2img">PDF → 圖片</button>
+  <button data-tab="imgconv">圖片格式互轉</button>
+</nav>
+
+<main>
+<!-- 分頁一 -->
+<section class="panel active" id="tab-img2pdf">
+  <div class="drop">把圖片拖到這裡，或
+    <button class="btn small" data-pick="in1">選擇檔案</button>
+    <input type="file" id="in1" multiple accept="image/*" hidden>
+    <div class="muted">支援 PNG、JPG、WebP 等格式，可一次加入多張</div>
+  </div>
+  <div class="toolbar">
+    <span class="info" id="info1">尚未加入圖片</span>
+    <button class="btn small" id="sortName1">依檔名排序</button>
+    <button class="btn small" id="clear1">全部清除</button>
+  </div>
+  <p class="hint">拖曳縮圖即可調整頁面順序，左上角數字為頁碼。</p>
+  <div class="grid sortable" id="grid1"></div>
+
+  <div class="options">
+    <fieldset>
+      <legend>版面</legend>
+      <label><input type="radio" name="layout1" value="original" checked> 維持圖片原尺寸</label>
+      <label><input type="radio" name="layout1" value="a4"> 整合成 A4</label>
+    </fieldset>
+    <fieldset>
+      <legend>最高解析度</legend>
+      <label><input type="radio" name="maxdpi1" value="300"> 300 DPI</label>
+      <label><input type="radio" name="maxdpi1" value="600" checked> 600 DPI</label>
+      <label><input type="radio" name="maxdpi1" value="900"> 900 DPI</label>
+      <label><input type="radio" name="maxdpi1" value="0"> 不限制</label>
+      <div class="muted">超過的圖片會自動縮小，避免 PDF 顯示異常</div>
+    </fieldset>
+    <fieldset id="a4opts" class="disabled">
+      <legend>A4 設定</legend>
+      <div class="row">方向：
+        <label><input type="radio" name="orient1" value="auto" checked> 依圖片自動</label>
+        <label><input type="radio" name="orient1" value="portrait"> 直式</label>
+        <label><input type="radio" name="orient1" value="landscape"> 橫式</label>
+      </div>
+      <div class="row">邊界：
+        <label><input type="radio" name="margin1" value="0"> 無</label>
+        <label><input type="radio" name="margin1" value="10" checked> 窄 (1 公分)</label>
+        <label><input type="radio" name="margin1" value="20"> 標準 (2 公分)</label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>輸出</legend>
+      <div class="row">
+        <label><input type="radio" name="out1" value="merge" checked> 合併成一份 PDF</label>
+        <label><input type="radio" name="out1" value="each"> 每張各一份 (打包 ZIP)</label>
+      </div>
+      <div class="row">檔名：<input type="text" id="name1" placeholder="合併檔案" size="18"> .pdf</div>
+    </fieldset>
+  </div>
+  <button class="btn primary" id="run1">轉換並儲存</button>
+</section>
+
+<!-- 分頁二 -->
+<section class="panel" id="tab-pdf2img">
+  <div class="drop">把 PDF 拖到這裡，或
+    <button class="btn small" data-pick="in2">選擇檔案</button>
+    <input type="file" id="in2" accept="application/pdf,.pdf" hidden>
+    <div class="muted">一次處理一份 PDF</div>
+  </div>
+  <div class="toolbar">
+    <span class="info" id="info2">尚未載入 PDF</span>
+    <button class="btn small" id="all2">全選</button>
+    <button class="btn small" id="none2">全不選</button>
+    <button class="btn small" id="clear2">清除</button>
+  </div>
+  <p class="hint">點選縮圖可勾選或取消要輸出的頁面。</p>
+  <div class="grid" id="grid2"></div>
+
+  <div class="options">
+    <fieldset>
+      <legend>解析度</legend>
+      <label><input type="radio" name="dpi2" value="150"> 150 DPI</label>
+      <label><input type="radio" name="dpi2" value="300" checked> 300 DPI</label>
+      <label><input type="radio" name="dpi2" value="600"> 600 DPI</label>
+    </fieldset>
+    <fieldset>
+      <legend>格式</legend>
+      <div class="row">
+        <label><input type="radio" name="fmt2" value="png" checked> PNG</label>
+        <label><input type="radio" name="fmt2" value="jpg"> JPG</label>
+        <span id="q2wrap" hidden>品質 <input type="range" id="q2" min="50" max="100" value="92"> <span id="q2v">92</span></span>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>多頁輸出</legend>
+      <label><input type="checkbox" id="zip2" checked> 打包成 ZIP</label>
+    </fieldset>
+  </div>
+  <button class="btn primary" id="run2">轉換並儲存</button>
+</section>
+
+<!-- 分頁三 -->
+<section class="panel" id="tab-imgconv">
+  <div class="drop">把圖片拖到這裡，或
+    <button class="btn small" data-pick="in3">選擇檔案</button>
+    <input type="file" id="in3" multiple accept="image/*" hidden>
+    <div class="muted">可一次加入多張批次轉換</div>
+  </div>
+  <div class="toolbar">
+    <span class="info" id="info3">尚未加入圖片</span>
+    <button class="btn small" id="clear3">全部清除</button>
+  </div>
+  <div class="grid" id="grid3"></div>
+
+  <div class="options">
+    <fieldset>
+      <legend>轉換成</legend>
+      <div class="row">
+        <label><input type="radio" name="fmt3" value="png" checked> PNG</label>
+        <label><input type="radio" name="fmt3" value="jpg"> JPG</label>
+        <label><input type="radio" name="fmt3" value="webp"> WebP</label>
+        <span id="q3wrap" hidden>品質 <input type="range" id="q3" min="50" max="100" value="92"> <span id="q3v">92</span></span>
+      </div>
+      <div class="muted" id="alphaNote" hidden>轉成 JPG 時，透明背景會填成白色。</div>
+    </fieldset>
+    <fieldset>
+      <legend>多張輸出</legend>
+      <label><input type="checkbox" id="zip3" checked> 打包成 ZIP</label>
+    </fieldset>
+  </div>
+  <button class="btn primary" id="run3">轉換並儲存</button>
+</section>
+</main>
+
+<div id="overlay"><div class="box"><div id="progText">處理中…</div><progress id="prog" max="100" value="0"></progress></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const radio = n => document.querySelector(`input[name="${n}"]:checked`).value;
+const uid = (() => { let n = 0; return () => 'i' + (++n); })();
+const tick = () => new Promise(r => setTimeout(r, 0));
+const stripExt = n => { const d = n.lastIndexOf('.'); return d > 0 ? n.slice(0, d) : n; };
+const safeName = n => (n || '').replace(/[\\/:*?"<>|]/g, '_').trim();
+const MIME = { pdf: 'application/pdf', zip: 'application/zip', png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
+const DESC = { pdf: 'PDF 文件', zip: 'ZIP 壓縮檔', png: 'PNG 圖片', jpg: 'JPG 圖片', webp: 'WebP 圖片' };
+
+/* ---------- 通用介面 ---------- */
+let toastTimer;
+function toast(msg, ms = 3000) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+function showProg(text, frac) {
+  $('#overlay').classList.add('show'); $('#progText').textContent = text;
+  $('#prog').value = Math.round((frac || 0) * 100);
+}
+function hideProg() { $('#overlay').classList.remove('show'); }
+function canvasToBlob(c, mime, q) {
+  return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('圖片編碼失敗')), mime, q));
+}
+function makeDeduper() {
+  const used = new Set();
+  return name => {
+    const b = stripExt(name), e = name.slice(b.length);
+    let r = name, i = 1;
+    while (used.has(r.toLowerCase())) r = `${b} (${i++})${e}`;
+    used.add(r.toLowerCase()); return r;
+  };
+}
+function handleError(e) {
+  if (e && e.name === 'AbortError') return; // 使用者取消
+  console.error(e); toast('發生錯誤：' + (e && e.message ? e.message : e), 5000);
+}
+
+// 分頁切換
+$$('.tabs button').forEach(b => b.onclick = () => {
+  $$('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  $$('.panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + b.dataset.tab));
+});
+
+// 避免拖到其他地方時瀏覽器直接開啟檔案
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+function setupDrop(panelId, inputId, onFiles) {
+  const panel = $('#' + panelId), input = $('#' + inputId);
+  panel.querySelector(`[data-pick="${inputId}"]`).onclick = () => input.click();
+  input.onchange = () => { onFiles(Array.from(input.files)); input.value = ''; };
+  let depth = 0;
+  const isFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+  panel.addEventListener('dragenter', e => { if (isFiles(e)) { depth++; panel.classList.add('dragover'); } });
+  panel.addEventListener('dragleave', e => { if (isFiles(e) && --depth <= 0) { depth = 0; panel.classList.remove('dragover'); } });
+  panel.addEventListener('drop', e => {
+    depth = 0; panel.classList.remove('dragover');
+    if (isFiles(e)) { e.preventDefault(); onFiles(Array.from(e.dataTransfer.files)); }
+  });
+}
+
+/* ---------- 程式庫檢查與 PDF.js worker ---------- */
+const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const libsOK = !!(window.PDFLib && window.JSZip && window.pdfjsLib && window.Sortable);
+if (!libsOK) { $('#libBanner').classList.add('show'); $$('.btn.primary').forEach(b => b.disabled = true); }
+const workerReady = (async () => {
+  if (!window.pdfjsLib) return;
+  try {
+    const r = await fetch(WORKER_URL); const t = await r.text();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([t], { type: 'text/javascript' }));
+  } catch (e) { pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_URL; }
+})();
+
+/* ---------- 儲存位置 ---------- */
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('file-convert-tool', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(k) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+}
+async function idbSet(k, v) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); });
+}
+function browserDownload(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+async function uniqueIn(dir, name) {
+  const b = stripExt(name), e = name.slice(b.length); let n = name, i = 1;
+  for (;;) { try { await dir.getFileHandle(n); n = `${b} (${i++})${e}`; } catch (_) { return n; } }
+}
+async function writeToDir(dir, name, blob) {
+  const fh = await dir.getFileHandle(await uniqueIn(dir, name), { create: true });
+  const w = await fh.createWritable(); await w.write(blob); await w.close();
+}
+async function ensurePerm(dir) {
+  let p = await dir.queryPermission({ mode: 'readwrite' });
+  if (p !== 'granted') p = await dir.requestPermission({ mode: 'readwrite' });
+  return p === 'granted';
+}
+
+const Saver = {
+  mode: 'download', dir: null,
+  canAsk: 'showSaveFilePicker' in window,
+  canDir: 'showDirectoryPicker' in window,
+  // 必須在按鈕點擊當下呼叫 (瀏覽器要求使用者操作才能開啟對話框)
+  async prepareSingle(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    if (this.mode === 'ask' && this.canAsk) {
+      const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: DESC[ext], accept: { [MIME[ext]]: ['.' + ext] } }] });
+      return { write: async blob => { const w = await h.createWritable(); await w.write(blob); await w.close(); }, where: h.name };
+    }
+    if (this.mode === 'folder' && this.dir) {
+      if (await ensurePerm(this.dir)) { const d = this.dir; return { write: blob => writeToDir(d, name, blob), where: '資料夾「' + d.name + '」' }; }
+      toast('沒有資料夾的存取權限，改存到下載資料夾');
+    }
+    return { write: async blob => browserDownload(blob, name), where: '下載資料夾' };
+  },
+  async prepareMulti() {
+    if (this.mode === 'ask' && this.canDir) {
+      const d = await showDirectoryPicker({ mode: 'readwrite' });
+      return { write: (blob, name) => writeToDir(d, name, blob), where: '資料夾「' + d.name + '」' };
+    }
+    if (this.mode === 'folder' && this.dir) {
+      if (await ensurePerm(this.dir)) { const d = this.dir; return { write: (blob, name) => writeToDir(d, name, blob), where: '資料夾「' + d.name + '」' }; }
+      toast('沒有資料夾的存取權限，改存到下載資料夾');
+    }
+    return { write: async (blob, name) => { browserDownload(blob, name); await new Promise(r => setTimeout(r, 250)); }, where: '下載資料夾' };
+  }
+};
+
+async function initSaver() {
+  const sel = $('#saveMode');
+  if (!Saver.canAsk) { const o = sel.querySelector('[value=ask]'); o.disabled = true; o.textContent += ' (此瀏覽器不支援)'; }
+  if (!Saver.canDir) { const o = sel.querySelector('[value=folder]'); o.disabled = true; o.textContent += ' (此瀏覽器不支援)'; }
+  try { const m = localStorage.getItem('saveMode'); if (m) Saver.mode = m; } catch (_) {}
+  try { if (Saver.canDir) Saver.dir = (await idbGet('dir')) || null; } catch (_) {}
+  if ((Saver.mode === 'ask' && !Saver.canAsk) || (Saver.mode === 'folder' && (!Saver.canDir || !Saver.dir))) Saver.mode = 'download';
+  sel.value = Saver.mode; updateSaveUI();
+  sel.onchange = async () => {
+    if (sel.value === 'folder' && !Saver.dir) { if (!(await pickFolder())) { sel.value = Saver.mode; return; } }
+    Saver.mode = sel.value;
+    try { localStorage.setItem('saveMode', Saver.mode); } catch (_) {}
+    updateSaveUI();
+  };
+  $('#pickFolder').onclick = pickFolder;
+}
+async function pickFolder() {
+  try {
+    const h = await showDirectoryPicker({ mode: 'readwrite' });
+    Saver.dir = h; try { await idbSet('dir', h); } catch (_) {}
+    updateSaveUI(); return true;
+  } catch (e) { if (e.name !== 'AbortError') handleError(e); return false; }
+}
+function updateSaveUI() {
+  const f = Saver.mode === 'folder';
+  $('#pickFolder').hidden = !f;
+  $('#folderName').textContent = f && Saver.dir ? '目前：' + Saver.dir.name : '';
+}
+initSaver();
+
+/* ---------- 圖片工具 ---------- */
+function loadImageSize(url) {
+  return new Promise(res => { const i = new Image(); i.onload = () => res({ w: i.naturalWidth, h: i.naturalHeight }); i.onerror = () => res(null); i.src = url; });
+}
+function jpegOrientation(buf) {
+  try {
+    const v = new DataView(buf);
+    if (v.getUint16(0) !== 0xFFD8) return 1;
+    let off = 2;
+    while (off + 4 < v.byteLength) {
+      const marker = v.getUint16(off); off += 2;
+      if ((marker & 0xFF00) !== 0xFF00) break;
+      if (marker === 0xFFE1) {
+        if (v.getUint32(off + 2) !== 0x45786966) return 1;
+        const tiff = off + 8, little = v.getUint16(tiff) === 0x4949;
+        const ifd = tiff + v.getUint32(tiff + 4, little), n = v.getUint16(ifd, little);
+        for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (v.getUint16(e, little) === 0x0112) return v.getUint16(e + 8, little); }
+        return 1;
+      }
+      off += v.getUint16(off);
+    }
+  } catch (_) {}
+  return 1;
+}
+function loadImg(url) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('圖片讀取失敗')); i.src = url; });
+}
+// 讀取圖片檔內記錄的 DPI (PNG 的 pHYs、JPG 的 JFIF)，沒有記錄則回傳 0
+function imageDpi(buf, type) {
+  try {
+    const v = new DataView(buf);
+    if (type === 'image/png') {
+      let off = 8;
+      while (off + 12 <= v.byteLength) {
+        const len = v.getUint32(off), t = v.getUint32(off + 4);
+        if (t === 0x70485973) { const x = v.getUint32(off + 8), unit = v.getUint8(off + 16); return unit === 1 && x > 0 ? Math.round(x * 0.0254) : 0; }
+        if (t === 0x49444154) break;
+        off += 12 + len;
+      }
+    } else if (type === 'image/jpeg') {
+      let off = 2;
+      while (off + 4 < v.byteLength) {
+        const m = v.getUint16(off); if ((m & 0xFF00) !== 0xFF00) break;
+        if (m === 0xFFE0 && v.getUint32(off + 4) === 0x4A464946) {
+          const units = v.getUint8(off + 11), x = v.getUint16(off + 12);
+          return x > 1 ? (units === 1 ? x : units === 2 ? Math.round(x * 2.54) : 0) : 0;
+        }
+        off += 2 + v.getUint16(off + 2);
+      }
+    }
+  } catch (_) {}
+  return 0;
+}
+// 解碼圖片並縮放到指定像素 (src 需有 file、url、w、h)
+async function decodeToCanvas(src, tw, th, whiteBg) {
+  const c = document.createElement('canvas'); c.width = tw; c.height = th;
+  const ctx = c.getContext('2d');
+  if (whiteBg) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, tw, th); }
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  let bmp = null;
+  try {
+    const opt = { imageOrientation: 'from-image' };
+    if (tw !== src.w || th !== src.h) Object.assign(opt, { resizeWidth: tw, resizeHeight: th, resizeQuality: 'high' });
+    bmp = await createImageBitmap(src.file, opt);
+  } catch (_) {}
+  if (bmp) { ctx.drawImage(bmp, 0, 0, tw, th); bmp.close && bmp.close(); }
+  else ctx.drawImage(await loadImg(src.url), 0, 0, tw, th);
+  return c;
+}
+
+/* ---------- 分頁一：圖片 → PDF ---------- */
+const imgs = [];
+const grid1 = $('#grid1');
+async function addImgs1(files) {
+  let bad = 0;
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) { bad++; continue; }
+    const url = URL.createObjectURL(f); const s = await loadImageSize(url);
+    if (!s) { bad++; URL.revokeObjectURL(url); continue; }
+    imgs.push({ id: uid(), file: f, name: f.name, url, w: s.w, h: s.h });
+  }
+  if (bad) toast(`有 ${bad} 個檔案不是可讀取的圖片，已略過`);
+  render1();
+}
+function render1() {
+  grid1.innerHTML = '';
+  imgs.forEach((it, i) => {
+    const c = document.createElement('div'); c.className = 'card'; c.dataset.id = it.id;
+    c.innerHTML = `<span class="num">${i + 1}</span><button class="del" title="移除">×</button>
+      <div class="thumb"><img draggable="false"></div><div class="name"></div>`;
+    c.querySelector('img').src = it.url;
+    c.querySelector('.name').textContent = it.name; c.querySelector('.name').title = `${it.name} (${it.w}×${it.h})`;
+    c.querySelector('.del').onclick = () => { const k = imgs.findIndex(x => x.id === it.id); URL.revokeObjectURL(it.url); imgs.splice(k, 1); render1(); };
+    grid1.appendChild(c);
+  });
+  $('#info1').textContent = imgs.length ? `共 ${imgs.length} 張圖片` : '尚未加入圖片';
+  $('#name1').placeholder = imgs.length === 1 ? stripExt(imgs[0].name) : '合併檔案';
+}
+function renumber1() { $$('#grid1 .card .num').forEach((n, i) => n.textContent = i + 1); }
+if (window.Sortable) {
+  Sortable.create(grid1, {
+    animation: 150, ghostClass: 'ghost', filter: '.del', preventOnFilter: false,
+    onEnd: () => {
+      const order = $$('#grid1 .card').map(c => c.dataset.id);
+      imgs.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)); renumber1();
+    }
+  });
+}
+setupDrop('tab-img2pdf', 'in1', addImgs1);
+$('#sortName1').onclick = () => { imgs.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant', { numeric: true })); render1(); };
+$('#clear1').onclick = () => { imgs.forEach(i => URL.revokeObjectURL(i.url)); imgs.length = 0; render1(); };
+$$('input[name=layout1]').forEach(r => r.onchange = () => $('#a4opts').classList.toggle('disabled', radio('layout1') !== 'a4'));
+
+async function embedImage(doc, it, buf, f) {
+  const t = it.file.type;
+  if (f >= 0.98) {
+    if (t === 'image/png') { try { return await doc.embedPng(buf); } catch (_) {} }
+    if (t === 'image/jpeg' && jpegOrientation(buf) <= 1) { try { return await doc.embedJpg(buf); } catch (_) {} }
+    f = 1;
+  }
+  // 需要縮小、轉正或其他格式：透過畫布重新編碼
+  const isJpg = t === 'image/jpeg';
+  const tw = Math.max(1, Math.round(it.w * f)), th = Math.max(1, Math.round(it.h * f));
+  const c = await decodeToCanvas(it, tw, th, true);
+  const blob = await canvasToBlob(c, isJpg ? 'image/jpeg' : 'image/png', 0.92);
+  c.width = c.height = 0;
+  const b2 = await blob.arrayBuffer();
+  return isJpg ? doc.embedJpg(b2) : doc.embedPng(b2);
+}
+const A4 = [595.28, 841.89], MM = 72 / 25.4, MAX_PT = 14400;
+// 計算頁面大小與圖片位置 (單位：pt)
+function pageGeom(iw, ih, srcDpi, o) {
+  if (o.layout === 'original') {
+    const dpi = srcDpi || 96; // 圖片沒記錄 DPI 時以 96 DPI 換算
+    let w = iw / dpi * 72, h = ih / dpi * 72;
+    const k = Math.min(1, MAX_PT / Math.max(w, h)); w *= k; h *= k;
+    return { pw: w, ph: h, x: 0, y: 0, w, h };
+  }
+  let [pw, ph] = A4;
+  if (o.orient === 'landscape' || (o.orient === 'auto' && iw > ih)) [pw, ph] = [ph, pw];
+  const m = o.margin * MM, s = Math.min((pw - 2 * m) / iw, (ph - 2 * m) / ih);
+  const w = iw * s, h = ih * s;
+  return { pw, ph, x: (pw - w) / 2, y: (ph - h) / 2, w, h };
+}
+// 依最高 DPI 算出縮小比例；另外限制總像素不超過 A4 在該 DPI 的大小
+function shrinkFactor(iw, ih, g, maxDpi) {
+  if (!maxDpi) return 1;
+  const effDpi = iw / (g.w / 72), cap = 96.7 * maxDpi * maxDpi;
+  return Math.min(1, maxDpi / effDpi, Math.sqrt(cap / (iw * ih)));
+}
+async function addImage(doc, it, o) {
+  const buf = await it.file.arrayBuffer();
+  const g = pageGeom(it.w, it.h, imageDpi(buf, it.file.type), o);
+  const f = shrinkFactor(it.w, it.h, g, o.maxDpi);
+  const img = await embedImage(doc, it, buf, f);
+  doc.addPage([g.pw, g.ph]).drawImage(img, { x: g.x, y: g.y, width: g.w, height: g.h });
+  return f < 0.98;
+}
+$('#run1').onclick = async () => {
+  if (!imgs.length) return toast('請先加入圖片');
+  const o = { layout: radio('layout1'), orient: radio('orient1'), margin: Number(radio('margin1')), maxDpi: Number(radio('maxdpi1')) };
+  let shrunk = 0;
+  const each = radio('out1') === 'each' && imgs.length > 1;
+  const list = imgs.slice();
+  const base = safeName($('#name1').value) || (list.length === 1 ? safeName(stripExt(list[0].name)) : '合併檔案');
+  try {
+    const target = await Saver.prepareSingle(base + (each ? '.zip' : '.pdf'));
+    const { PDFDocument } = PDFLib;
+    if (!each) {
+      const doc = await PDFDocument.create();
+      for (let i = 0; i < list.length; i++) {
+        showProg(`處理第 ${i + 1} / ${list.length} 張…`, i / list.length); await tick();
+        if (await addImage(doc, list[i], o)) shrunk++;
+      }
+      showProg('產生 PDF…', 1); await tick();
+      await target.write(new Blob([await doc.save()], { type: MIME.pdf }));
+    } else {
+      const zip = new JSZip(), dd = makeDeduper();
+      for (let i = 0; i < list.length; i++) {
+        showProg(`處理第 ${i + 1} / ${list.length} 張…`, i / list.length); await tick();
+        const doc = await PDFDocument.create();
+        if (await addImage(doc, list[i], o)) shrunk++;
+        zip.file(dd(stripExt(list[i].name) + '.pdf'), await doc.save());
+      }
+      showProg('打包 ZIP…', 1); await tick();
+      await target.write(await zip.generateAsync({ type: 'blob' }));
+    }
+    hideProg(); toast('完成！已儲存到' + target.where + (shrunk ? ` (${shrunk} 張圖片已依 ${o.maxDpi} DPI 上限縮小)` : ''), 4500);
+  } catch (e) { hideProg(); handleError(e); }
+};
+
+/* ---------- 分頁二：PDF → 圖片 ---------- */
+let pdfDoc = null, pdfName = '', pdfSel = [];
+const grid2 = $('#grid2');
+setupDrop('tab-pdf2img', 'in2', files => {
+  const f = files.find(x => x.type === 'application/pdf' || /\.pdf$/i.test(x.name));
+  if (!f) return toast('請選擇 PDF 檔案');
+  if (files.length > 1) toast('一次只處理一份 PDF，已載入「' + f.name + '」');
+  loadPdf(f);
+});
+function update2() {
+  const n = pdfSel.filter(Boolean).length;
+  $('#info2').textContent = pdfDoc ? `「${pdfName}」共 ${pdfDoc.numPages} 頁，已選 ${n} 頁` : '尚未載入 PDF';
+}
+async function loadPdf(file) {
+  try {
+    await workerReady;
+    if (pdfDoc) { pdfDoc.destroy(); pdfDoc = null; }
+    grid2.innerHTML = ''; showProg('讀取 PDF…', 0);
+    pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    pdfName = file.name; const n = pdfDoc.numPages; pdfSel = new Array(n).fill(true);
+    for (let i = 1; i <= n; i++) {
+      showProg(`產生預覽 ${i} / ${n}…`, i / n);
+      const page = await pdfDoc.getPage(i), vp0 = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: 220 / Math.max(vp0.width, vp0.height) });
+      const cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      const c = document.createElement('div'); c.className = 'card pdf-card';
+      c.innerHTML = `<span class="num">${i}</span><input type="checkbox" checked><div class="thumb"></div><div class="name">第 ${i} 頁</div>`;
+      c.querySelector('.thumb').appendChild(cv);
+      const cb = c.querySelector('input');
+      const sync = () => { pdfSel[i - 1] = cb.checked; c.classList.toggle('off', !cb.checked); update2(); };
+      cb.onchange = sync;
+      c.onclick = e => { if (e.target !== cb) { cb.checked = !cb.checked; sync(); } };
+      grid2.appendChild(c);
+    }
+    hideProg(); update2();
+  } catch (e) {
+    hideProg(); pdfDoc = null; update2();
+    if (e && e.name === 'PasswordException') toast('這份 PDF 有密碼保護，無法開啟', 5000); else handleError(e);
+  }
+}
+function setAll2(v) { $$('#grid2 .pdf-card').forEach((c, i) => { c.querySelector('input').checked = v; c.classList.toggle('off', !v); pdfSel[i] = v; }); update2(); }
+$('#all2').onclick = () => setAll2(true);
+$('#none2').onclick = () => setAll2(false);
+$('#clear2').onclick = () => { if (pdfDoc) pdfDoc.destroy(); pdfDoc = null; grid2.innerHTML = ''; update2(); };
+$$('input[name=fmt2]').forEach(r => r.onchange = () => $('#q2wrap').hidden = radio('fmt2') !== 'jpg');
+$('#q2').oninput = () => $('#q2v').textContent = $('#q2').value;
+
+$('#run2').onclick = async () => {
+  if (!pdfDoc) return toast('請先載入 PDF');
+  const pages = pdfSel.map((v, i) => v ? i + 1 : 0).filter(Boolean);
+  if (!pages.length) return toast('請至少勾選一頁');
+  const dpi = Number(radio('dpi2')), ext = radio('fmt2'), mime = MIME[ext], q = $('#q2').value / 100;
+  const base = safeName(stripExt(pdfName)) || 'PDF';
+  const digits = Math.max(2, String(pdfDoc.numPages).length);
+  const fname = p => pdfDoc.numPages === 1 ? `${base}.${ext}` : `${base}_第${String(p).padStart(digits, '0')}頁.${ext}`;
+  const useZip = pages.length > 1 && $('#zip2').checked;
+  try {
+    let single = null, multi = null;
+    if (pages.length === 1) single = await Saver.prepareSingle(fname(pages[0]));
+    else if (useZip) single = await Saver.prepareSingle(base + '_圖片.zip');
+    else multi = await Saver.prepareMulti();
+    const zip = useZip ? new JSZip() : null;
+    let shrunk = false;
+    for (let k = 0; k < pages.length; k++) {
+      const p = pages[k];
+      showProg(`轉換第 ${p} 頁 (${k + 1} / ${pages.length})…`, k / pages.length); await tick();
+      const page = await pdfDoc.getPage(p);
+      let scale = dpi / 72; const v0 = page.getViewport({ scale });
+      const area = v0.width * v0.height, maxArea = 160e6, maxSide = 16000;
+      const f = Math.min(1, Math.sqrt(maxArea / area), maxSide / Math.max(v0.width, v0.height));
+      if (f < 1) { scale *= f; shrunk = true; }
+      const vp = page.getViewport({ scale });
+      const cv = document.createElement('canvas'); cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
+      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      const blob = await canvasToBlob(cv, mime, q); cv.width = cv.height = 0; page.cleanup();
+      if (zip) zip.file(fname(p), blob);
+      else if (single) await single.write(blob);
+      else await multi.write(blob, fname(p));
+    }
+    if (zip) { showProg('打包 ZIP…', 1); await tick(); await single.write(await zip.generateAsync({ type: 'blob' })); }
+    hideProg();
+    toast('完成！已儲存到' + (single || multi).where + (shrunk ? ' (部分頁面尺寸過大，已自動降低解析度)' : ''), 4500);
+  } catch (e) { hideProg(); handleError(e); }
+};
+
+/* ---------- 分頁三：圖片格式互轉 ---------- */
+const convs = [];
+const grid3 = $('#grid3');
+async function addImgs3(files) {
+  let bad = 0;
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) { bad++; continue; }
+    const url = URL.createObjectURL(f), sz = await loadImageSize(url);
+    if (!sz) { bad++; URL.revokeObjectURL(url); continue; }
+    convs.push({ id: uid(), file: f, name: f.name, url, w: sz.w, h: sz.h });
+  }
+  if (bad) toast(`有 ${bad} 個檔案不是圖片，已略過`);
+  render3();
+}
+function render3() {
+  grid3.innerHTML = '';
+  convs.forEach(it => {
+    const c = document.createElement('div'); c.className = 'card';
+    c.innerHTML = `<button class="del" title="移除">×</button><div class="thumb"><img draggable="false"></div><div class="name"></div>`;
+    c.querySelector('img').src = it.url;
+    c.querySelector('.name').textContent = it.name; c.querySelector('.name').title = it.name;
+    c.querySelector('.del').onclick = () => { URL.revokeObjectURL(it.url); convs.splice(convs.indexOf(it), 1); render3(); };
+    grid3.appendChild(c);
+  });
+  $('#info3').textContent = convs.length ? `共 ${convs.length} 張圖片` : '尚未加入圖片';
+}
+setupDrop('tab-imgconv', 'in3', addImgs3);
+$('#clear3').onclick = () => { convs.forEach(i => URL.revokeObjectURL(i.url)); convs.length = 0; render3(); };
+$$('input[name=fmt3]').forEach(r => r.onchange = () => {
+  const f = radio('fmt3'); $('#q3wrap').hidden = f === 'png'; $('#alphaNote').hidden = f !== 'jpg';
+});
+$('#q3').oninput = () => $('#q3v').textContent = $('#q3').value;
+
+$('#run3').onclick = async () => {
+  if (!convs.length) return toast('請先加入圖片');
+  const ext = radio('fmt3'), mime = MIME[ext], q = $('#q3').value / 100;
+  const list = convs.slice(), dd = makeDeduper();
+  const names = list.map(it => dd(stripExt(it.name) + '.' + ext));
+  const useZip = list.length > 1 && $('#zip3').checked;
+  try {
+    let single = null, multi = null;
+    if (list.length === 1) single = await Saver.prepareSingle(names[0]);
+    else if (useZip) single = await Saver.prepareSingle('轉換圖片_' + ext.toUpperCase() + '.zip');
+    else multi = await Saver.prepareMulti();
+    const zip = useZip ? new JSZip() : null;
+    let bad = 0, big = 0;
+    const MAX_PX = 150e6, MAX_SIDE = 32000;
+    for (let i = 0; i < list.length; i++) {
+      showProg(`轉換第 ${i + 1} / ${list.length} 張…`, i / list.length); await tick();
+      let blob;
+      try {
+        const it = list[i], f = Math.min(1, Math.sqrt(MAX_PX / (it.w * it.h)), MAX_SIDE / Math.max(it.w, it.h));
+        if (f < 1) big++;
+        const c = await decodeToCanvas(it, Math.max(1, Math.round(it.w * f)), Math.max(1, Math.round(it.h * f)), ext === 'jpg');
+        blob = await canvasToBlob(c, mime, ext === 'png' ? undefined : q); c.width = c.height = 0;
+      } catch (_) { bad++; continue; }
+      if (zip) zip.file(names[i], blob);
+      else if (single) await single.write(blob);
+      else await multi.write(blob, names[i]);
+    }
+    if (zip) { showProg('打包 ZIP…', 1); await tick(); await single.write(await zip.generateAsync({ type: 'blob' })); }
+    hideProg();
+    toast('完成！已儲存到' + (single || multi).where + (bad ? ` (${bad} 張無法讀取，已略過)` : '') + (big ? ` (${big} 張圖片過大，已自動縮小)` : ''), 4500);
+  } catch (e) { hideProg(); handleError(e); }
+};
+
+/* ---------- 離線快取 (安裝成應用程式時使用) ---------- */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('./sw.js').catch(e => console.warn('Service worker 註冊失敗', e));
+}
+</script>
+</body>
+</html>
